@@ -1,0 +1,26 @@
+# Changelog
+
+## [2.1.0] - 2026-01-27
+
+### Introducción
+Esta versión 2.1.0 es una actualización mayor enfocada en **Seguridad**, **Estabilidad** y **Compatibilidad**. Se ha introducido un "Modo Seguro" para prevenir errores durante la instalación y se ha modernizado el código para cumplir con los estándares de WooCommerce High-Performance Order Storage (HPOS).
+
+### ✨ Novadades y Mejoras
+- **Installation Safety Guard (Blindaje de Instalación):**
+    - El plugin ahora verifica automáticamente que WooCommerce esté instalado y activo antes de ejecutarse.
+    - **Self-Healing:** Si la configuración del plugin se corrompe (ej. por una migración fallida), el sistema restaura los valores por defecto seguros automáticamente sin romper el sitio.
+- **Modo Debug y Observabilidad:**
+    - Se añadió una opción **"Debug Log"** en los ajustes de la pasarela.
+    - Al activarse, genera logs detallados visibles directamente en **WooCommerce > Estado > Registros**, eliminando la necesidad de acceder por FTP para diagnósticos.
+- **Optimización de Rendimiento (Smart Cache):**
+    - La carga del panel de administración es ahora **instantánea**. Se implementó un sistema de caché inteligente para las consultas a la API de Wompi, evitando que el admin de WordPress se congele si la API de Wompi responde lento.
+    - Mecanismo de **Auto-fallback**: Si la API de Wompi estuvierea caída, el panel de administración NO mostrará error 500/Pantalla Blanca, sino que cargará con opciones por defecto seguros.
+
+### 🛠️ Cambios Técnicos
+- **HPOS Compatibility:** Migración completa de `update_post_meta` y `wc_get_order` a la nueva arquitectura CRUD de WooCommerce. Compatible 100% con el almacenamiento de órdenes optimizado.
+- **Refactorización de Logs:** Se eliminó la función global insegura `write_log` y se reemplazó por `WC_Logger` estándar.
+- **Limpieza de Código:** Eliminación de funciones anidadas y lógica redundante en el cargador principal.
+
+### 🔒 Seguridad
+- **Sanitización:** Se mejoró la sanitización de datos de entrada en los webhooks.
+- **Protección de Credenciales:** La lógica de actualización ahora garantiza que las credenciales (`App ID`, `Api Secret`) nunca se sobrescriban accidentalmente durante una reactivación.

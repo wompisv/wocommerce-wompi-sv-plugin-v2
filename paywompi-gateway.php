@@ -41,20 +41,20 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         $headers = getallheaders();
         $ValidoPorEndPoint = false;
         $entityBody = @file_get_contents('php://input');
-        write_log('entra en el validate_wompi_webhook ************************************ ' . json_encode($headers) . ' ************');
+        $this->log('entra en el validate_wompi_webhook ************************************ ' . json_encode($headers) . ' ************');
 
-        write_log('entra en el validate_wompi_webhook ************************************ BODY: ' . $entityBody . ' ************');
+        $this->log('entra en el validate_wompi_webhook ************************************ BODY: ' . $entityBody . ' ************');
         $arrayResult = json_decode($entityBody);
         $order_id = $arrayResult->{'EnlacePago'}->{'IdentificadorEnlaceComercio'};
-        $customer_order = new WC_Order($order_id);
-        write_log('entra en el validate_wompi_webhook ********** ORDER ID: ' . json_encode($order_id) . ' *****');
+        $customer_order = wc_get_order($order_id);
+        $this->log('entra en el validate_wompi_webhook ********** ORDER ID: ' . json_encode($order_id) . ' *****');
         $sig = hash_hmac('sha256', $entityBody, $this->client_secret);
         $hash = $headers['Wompi_Hash'];
-        write_log('****----- ver entra al undefined hash $idTransaccion: ' . $arrayResult->{'IdTransaccion'} . ' ------****');
+        $this->log('****----- ver entra al undefined hash $idTransaccion: ' . $arrayResult->{'IdTransaccion'} . ' ------****');
 
         if (!isset($hash))
         {
-            write_log('****----- entra al undefined hash ------****');
+            $this->log('****----- entra al undefined hash ------****');
 
             $client_id = WC_Settings_API::get_option('client_id');
             $client_secret = WC_Settings_API::get_option('client_secret');
@@ -114,12 +114,13 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
             }
         }
 
-        update_post_meta($order_id, '_wc_order_wompi_Hash', $hash);
-        update_post_meta($order_id, '_wc_order_wompi_cadena', $entityBody);
-        write_log('entra en el validate_wompi_webhook ********** HASH: ' . $hash . ' *****');
+        $customer_order->update_meta_data('_wc_order_wompi_Hash', $hash);
+        $customer_order->update_meta_data('_wc_order_wompi_cadena', $entityBody);
+        $customer_order->save();
+        $this->log('entra en el validate_wompi_webhook ********** HASH: ' . $hash . ' *****');
 
         $vaux = apache_request_headers();
-        write_log('apache_request_headers() ********** ' . json_encode($vaux) . ' *****');
+        $this->log('apache_request_headers() ********** ' . json_encode($vaux) . ' *****');
 
         $TotalComerce = method_exists($customer_order, 'get_total') ? $customer_order->get_total() : $customer_order->order_total;
         $TotalWompi = $arrayResult->{'Monto'};
@@ -129,12 +130,12 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
             {
                 if ($sig == $hash)
                 {
-                    write_log('entra en el validate_wompi_webhook ********** HASH VALIDO  *****');
-                    update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' valido:');
+                    $this->log('entra en el validate_wompi_webhook ********** HASH VALIDO  *****');
+                    $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' valido:');
                     $customer_order->add_order_note(__('wompi pago completado WH.', 'wompi-payment'));
 
+                    $customer_order->update_meta_data('_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'});
                     $customer_order->payment_complete();
-                    update_post_meta($order_id, '_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'}, true);
                     $woocommerce
                         ->cart
                         ->empty_cart();
@@ -142,13 +143,13 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
                 }
                 else
                 {
-                    write_log('entra en el validate_wompi_webhook ********** HASH NO VALIDO  *****');
-                    write_log('entra en el validate_wompi_webhook ********** HASH Endpoint VALIDO  *****');
-                    update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' valido:');
+                    $this->log('entra en el validate_wompi_webhook ********** HASH NO VALIDO  *****');
+                    $this->log('entra en el validate_wompi_webhook ********** HASH Endpoint VALIDO  *****');
+                    $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' valido:');
                     $customer_order->add_order_note(__('wompi pago completado EndPoint.', 'wompi-payment'));
 
+                    $customer_order->update_meta_data('_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'});
                     $customer_order->payment_complete();
-                    update_post_meta($order_id, '_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'}, true);
                     $woocommerce
                         ->cart
                         ->empty_cart();
@@ -158,18 +159,19 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
             }
             else
             {
-                write_log('entra en el validate_wompi_webhook ********** HASH NO VALIDO WH *****');
-                write_log('entra en el validate_wompi_webhook ********** HASH NO VALIDO EndPoint  *****');
+                $this->log('entra en el validate_wompi_webhook ********** HASH NO VALIDO WH *****');
+                $this->log('entra en el validate_wompi_webhook ********** HASH NO VALIDO EndPoint  *****');
 
-                update_post_meta($order_id, '_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'}, true);
-                update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' No valido:');
+                $customer_order->update_meta_data('_wc_order_wompi_transactionid', $arrayResult->{'IdTransaccion'});
+                $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' No valido:');
+                $customer_order->save();
                 $customer_order->add_order_note(__('wompi hash no valido WH and EndPoint.', 'wompi-payment'));
                 header('HTTP/1.1 200 OK');
             }
         }
         else
         {
-            write_log('entra en el validate_wompi_webhook ********** Los montos no coinciden *****');
+            $this->log('entra en el validate_wompi_webhook ********** Los montos no coinciden *****');
 
             update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' No valido:');
             $customer_order->add_order_note(__('wompi Los montos no coinciden.', 'wompi-payment'));
@@ -181,7 +183,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
     {
         global $woocommerce;
         $order_id = sanitize_text_field($_GET['identificadorEnlaceComercio']);
-        $customer_order = new WC_Order($order_id);
+        $customer_order = wc_get_order($order_id);
         $idTransaccion = sanitize_text_field($_GET['idTransaccion']);
         $idEnlace = sanitize_text_field($_GET['idEnlace']);
         $monto = sanitize_text_field($_GET['monto']);
@@ -189,7 +191,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         $cadena = $order_id . $idTransaccion . $idEnlace . $monto;
         $sig = hash_hmac('sha256', $cadena, $this->client_secret);
 
-        $authcode = get_post_meta($order_id, '_wc_order_wompi_authcode', true);
+        $authcode = $customer_order->get_meta('_wc_order_wompi_authcode');
         $TotalComerce = method_exists($customer_order, 'get_total') ? $customer_order->get_total() : $customer_order->order_total;
         if ($TotalComerce == $monto)
         {
@@ -197,16 +199,17 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
             if ($authcode == null)
             {
 
-                update_post_meta($order_id, '_wc_order_wompi_Hash', $hash);
-                update_post_meta($order_id, '_wc_order_wompi_cadena', $cadena);
+                $customer_order->update_meta_data('_wc_order_wompi_Hash', $hash);
+                $customer_order->update_meta_data('_wc_order_wompi_cadena', $cadena);
+                $customer_order->save();
 
                 if ($sig == $hash)
                 {
-                    update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' valido:');
+                    $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' valido:');
                     $customer_order->add_order_note(__('wompi pago completado.', 'wompi-payment'));
 
+                    $customer_order->update_meta_data('_wc_order_wompi_transactionid', $idTransaccion);
                     $customer_order->payment_complete();
-                    update_post_meta($order_id, '_wc_order_wompi_transactionid', $idTransaccion, true);
                     $woocommerce
                         ->cart
                         ->empty_cart();
@@ -214,7 +217,8 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
                 }
                 else
                 {
-                    update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' No valido:');
+                    $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' No valido:');
+                    $customer_order->save();
                     $customer_order->add_order_note(__('wompi hash no valido.', 'wompi-payment'));
                     home_url();
                 }
@@ -226,7 +230,8 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         }
         else
         {
-            update_post_meta($order_id, '_wc_order_wompi_StatusHash', $sig . ' No valido:');
+            $customer_order->update_meta_data('_wc_order_wompi_StatusHash', $sig . ' No valido:');
+            $customer_order->save();
             $customer_order->add_order_note(__('wompi los montos no coinciden.', 'wompi-payment'));
             home_url();
         }
@@ -234,7 +239,8 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
   
   public function init_form_fields()
   {
-    write_log('init formswompi *****');
+    $this->log('init formswompi *****');
+    $this->log('init formswompi *****');
         $arrayPuntos = array(
             'true' => 'SI',
             'false' => 'NO'
@@ -242,67 +248,85 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         $array = array(
             'false' => '(No habilitar pago en cuotas)'
         );
-        $client_id = WC_Settings_API::get_option('client_id');
-        $client_secret = WC_Settings_API::get_option('client_secret');
-        $postBody = array(
-            'grant_type' => 'client_credentials',
-            'client_id' => $client_id,
-            'client_secret' => $client_secret,
-            'audience' => 'wompi_api',
-        );
-        $response = wp_remote_post('https://id.wompi.sv/connect/token', array(
-            'method' => 'POST',
-            'body' => http_build_query($postBody) ,
-            'timeout' => 90,
-            'sslverify' => false,
-        ));
-        if (is_wp_error($response))
-        {
-            $error_message = $response->get_error_message();
-        }
-        else
-        {
 
-            $body = wp_remote_retrieve_body($response);
-            $arrayResult = json_decode($body);
-            $token = $arrayResult->{'access_token'};
+        // 1. Smart Cache Check (Performance)
+        $cached_options = get_transient( 'wompi_admin_options_cache' );
+        
+        if ( false !== $cached_options && is_array( $cached_options ) ) {
+            $array = $cached_options['cuotas'];
+            $arrayPuntos = $cached_options['puntos'];
+        } 
+        else {
+            // 2. API Call with Fallback (Resilience)
+            $client_id = $this->get_option('client_id');
+            $client_secret = $this->get_option('client_secret');
+            
+            // Only attempt API if credentials exist
+            if ( ! empty( $client_id ) && ! empty( $client_secret ) ) {
+                $postBody = array(
+                    'grant_type' => 'client_credentials',
+                    'client_id' => $client_id,
+                    'client_secret' => $client_secret,
+                    'audience' => 'wompi_api',
+                );
 
-            $args = array(
-                'timeout' => '90',
-                'blocking' => true,
-                'headers' => array(
-                    "Authorization" => 'Bearer ' . $token,
-                    "content-type" => 'application/json'
-                ) ,
-            );
-            $response = wp_remote_get('https://api.wompi.sv/Aplicativo', $args);
-            if (is_wp_error($response))
-            {
-                $error_message = $response->get_error_message();
-            }
-            else
-            {
-                $body = wp_remote_retrieve_body($response);
-                $arrayResult = json_decode($body);
-                $respuesta = $arrayResult->{'cuotasDisponibles'};
-                $padoConPuntos = false;
-                foreach ($respuesta as & $valor)
-                {
-                    $padoConPuntos = true;
-                    $array[$valor->{'cantidadCuotas'}] = $valor->{'cantidadCuotas'} . ' Meses (' . $valor->{'tasa'} . '% comisión)';
-                }
-                if (!$padoConPuntos)
-                {
-                    $array = array(
-                        'false' => '(Primero debes habilitar pago en cuotas en el portal de Wompi)'
-                    );
-                }
-                $respuesta = $arrayResult->{'aplicaPagoConPuntos'};
-                if (!$respuesta)
-                {
-                    $arrayPuntos = array(
-                        'false' => '(para habilitar esta opción debes comunicarse con servicio al cliente del Banco)'
-                    );
+                $response = wp_remote_post('https://id.wompi.sv/connect/token', array(
+                    'method' => 'POST',
+                    'body' => http_build_query($postBody) ,
+                    'timeout' => 15, // Reduced timeout from 90s to avoid admin freeze
+                    'sslverify' => false,
+                ));
+
+                if ( ! is_wp_error( $response ) ) {
+                    $body = wp_remote_retrieve_body($response);
+                    $arrayResult = json_decode($body);
+                    
+                    if ( isset( $arrayResult->{'access_token'} ) ) {
+                        $token = $arrayResult->{'access_token'};
+                        
+                        $args = array(
+                            'timeout' => 15,
+                            'blocking' => true,
+                            'headers' => array(
+                                "Authorization" => 'Bearer ' . $token,
+                                "content-type" => 'application/json'
+                            ) ,
+                        );
+                        
+                        $responseApp = wp_remote_get('https://api.wompi.sv/Aplicativo', $args);
+                        
+                        if ( ! is_wp_error( $responseApp ) ) {
+                            $bodyApp = wp_remote_retrieve_body($responseApp);
+                            $arrayResultApp = json_decode($bodyApp);
+                            
+                            // Process Cuotas
+                            if ( isset( $arrayResultApp->{'cuotasDisponibles'} ) ) {
+                                $respuesta = $arrayResultApp->{'cuotasDisponibles'};
+                                $padoConPuntos = false;
+                                foreach ($respuesta as $valor) {
+                                    $padoConPuntos = true;
+                                    $array[$valor->{'cantidadCuotas'}] = $valor->{'cantidadCuotas'} . ' Meses (' . $valor->{'tasa'} . '% comisión)';
+                                }
+                                if ( ! $padoConPuntos ) {
+                                    $array = array( 'false' => '(Primero debes habilitar pago en cuotas en el portal de Wompi)' );
+                                }
+                            }
+                            
+                            // Process Puntos
+                            if ( isset( $arrayResultApp->{'aplicaPagoConPuntos'} ) && ! $arrayResultApp->{'aplicaPagoConPuntos'} ) {
+                                $arrayPuntos = array( 'false' => '(para habilitar esta opción debes comunicarse con servicio al cliente del Banco)' );
+                            }
+
+                            // 3. Set Cache (Success only)
+                            set_transient( 'wompi_admin_options_cache', array(
+                                'cuotas' => $array,
+                                'puntos' => $arrayPuntos
+                            ), HOUR_IN_SECONDS );
+                        }
+                    }
+                } else {
+                    // API Down Logic: Log error silently, do not crash admin
+                    // $this->log('Wompi API connection failed: ' . $response->get_error_message());
                 }
             }
         }
@@ -405,15 +429,32 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
                 'desc_tip'  => __( 'Permitir cobrar con Bitcoin', 'wompi-payment' ),
                 'default' => 'false'
               ),
+            'debug' => array(
+                'title'       => __( 'Debug Log', 'wompi-payment' ),
+                'type'        => 'checkbox',
+                'label'       => __( 'Enable logging', 'wompi-payment' ),
+                'default'     => 'no',
+                'description' => sprintf( __( 'Log Wompi events, such as API requests, inside %s.', 'wompi-payment' ), '<code>' . WC_Log_Handler_File::get_log_file_path( 'wompi_payment' ) . '</code>' ),
+            ),
         );
   }
   
+  /**
+   * Process Admin Options (Save & Clear Cache)
+   */
+  public function process_admin_options() {
+      $saved = parent::process_admin_options();
+      // Clear cache to force refresh on next load
+      delete_transient( 'wompi_admin_options_cache' );
+      return $saved;
+  }
+
   // Process the payment
   public function process_payment($order_id)
     {
         global $woocommerce;
-        $customer_order = new WC_Order($order_id);
-        write_log('enstamos procesando el pago: DY: ' . $customer_order . ' *********');
+        $customer_order = wc_get_order($order_id);
+        $this->log('enstamos procesando el pago: DY: ' . $customer_order . ' *********');
         $client_id = $this->client_id;
         $client_secret = $this->client_secret;
         $api_permitirPagoCuotas = $this->api_permitirPagoCuotas;
@@ -438,7 +479,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         if (is_wp_error($response))
         {
             $error_message = $response->get_error_message();
-            write_log('crap: ' . $error_message . ' *********');
+            $this->log('crap: ' . $error_message . ' *********');
             echo "error: " . $error_message;
         }
         else
@@ -449,7 +490,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
 
             $order = wc_get_order($order_id);
             $url_redi = $this->get_return_url($order);
-            write_log('url redi: ' . $url_redi . ' *********');
+            $this->log('url redi: ' . $url_redi . ' *********');
             $configuracion = array(
                 "emailsNotificacion" => $this->api_email,
                 "esMontoEditable" => $this->api_edit_monto,
@@ -505,7 +546,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
             if (is_wp_error($response))
             {
                 $error_message = $response->get_error_message();
-                write_log('cra2p: ' . $error_message . ' *********');
+                $this->log('cra2p: ' . $error_message . ' *********');
                 echo "error: " . $error_message;
             }
             else
@@ -513,7 +554,7 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
                 $body = wp_remote_retrieve_body($response);
                 $arrayResult = json_decode($body);
                 $urlEnlace = $arrayResult->{'urlEnlace'};
-                write_log('all good: ' . $urlEnlace . ' *********');
+                $this->log('all good: ' . $urlEnlace . ' *********');
                 return array(
                     'result' => 'success',
                     'redirect' => $urlEnlace
@@ -522,13 +563,28 @@ class Pay_Wompi_Gateway extends WC_Payment_Gateway {
         }
     }
   
+  /**
+   * Helper Log Function
+   */
+  public function log( $message, $level = 'info' ) {
+      if ( 'yes' === $this->get_option( 'debug' ) ) {
+          if ( is_array( $message ) || is_object( $message ) ) {
+              $message = print_r( $message, true );
+          }
+          if ( empty( $this->logger ) ) {
+              $this->logger = wc_get_logger();
+          }
+          $this->logger->log( $level, $message, array( 'source' => 'wompi_payment' ) );
+      }
+  }
 }
 
 add_action('woocommerce_admin_order_data_after_billing_address', 'show_WOMPI_info', 10, 1);
 function show_WOMPI_info($order)
 {
     $order_id = method_exists($order, 'get_id') ? $order->get_id() : $order->id;
-    echo '<p><strong>' . __('WOMPI Transaction Id') . ':</strong> ' . get_post_meta($order_id, '_wc_order_wompi_transactionid', true) . '</p>';
+    $order_obj = wc_get_order($order_id);
+    echo '<p><strong>' . __('WOMPI Transaction Id') . ':</strong> ' . $order_obj->get_meta('_wc_order_wompi_transactionid') . '</p>';
 }
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'WOMPI_payment_action_links' );
 function WOMPI_payment_action_links( $links ) {
@@ -539,21 +595,5 @@ function WOMPI_payment_action_links( $links ) {
   return array_merge( $plugin_links, $links );
 }
 
-if (!function_exists('write_log'))
-        {
-            function write_log($log)
-            {
-                if (true === WP_DEBUG)
-                {
-                    if (is_array($log) || is_object($log))
-                    {
-                        error_log(print_r($log, true));
-                    }
-                    else
-                    {
-                        error_log($log);
-                    }
-                }
-            }
-        }
+
 ?>
